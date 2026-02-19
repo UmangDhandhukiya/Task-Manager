@@ -8,7 +8,7 @@ export async function POST(req){
         const userData = await db.collection("users").add({
             email: body.email,
             password: body.password,
-            role: body.role,
+            role: "user",
         })
 
         return NextResponse.json({
