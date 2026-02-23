@@ -6,6 +6,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AdminPanel from "./pages/admin/AdminPanel";
 import useAuthListener from "./hooks/useAuthListner";
 import AddTask from "./pages/AddTask";
+import EditTask from "./pages/EditTask"
 
 function App() {
   useAuthListener();
@@ -30,6 +31,14 @@ function App() {
           element={
             <ProtectedRoute>
               <AddTask />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/editTask/:id"
+          element={
+            <ProtectedRoute>
+              <EditTask/>
             </ProtectedRoute>
           }
         />

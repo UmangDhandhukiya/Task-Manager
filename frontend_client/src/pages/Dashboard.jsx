@@ -1,69 +1,88 @@
-import { Button } from "@mui/material";
-import React, { useEffect } from "react";
+import { Button, Pagination, Stack } from "@mui/material";
+import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { logoutUser } from "../appStore/authSlice";
-import {
-  setTasks,
-  deleteTask as deleteTaskRedux,
-} from "../appStore/taskSlice";
+import { setTasks, deleteTask as deleteTaskRedux } from "../appStore/taskSlice";
 import { Link, useNavigate } from "react-router-dom";
 import TaskList from "../components/TaskList";
-
-import {
-  collection,
-  getDocs,
-  deleteDoc,
-  doc,
-  query,
-  where,
-} from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db } from "../firebase";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
+import SearchFilter from "../components/SearchFilter";
+import { collection, onSnapshot } from "firebase/firestore";
 
 const Dashboard = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { user, role } = useSelector((state) => state.auth);
+  const { user } = useSelector((state) => state.auth);
   const { tasks } = useSelector((state) => state.tasks);
 
-  //fetch task
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [dueDate, setDueDate] = useState("");
+
+  const filteredTasks = tasks.filter((task) => {
+    return (
+      (task.title.toLowerCase().includes(search.toLowerCase()) ||
+        task.description.toLowerCase().includes(search.toLowerCase())) &&
+      (status === "" || task.status === status) &&
+      (dueDate === "" || task.dueDate?.slice(0, 10) === dueDate)
+    );
+  });
+
+  const [page, setpage] = useState(1);
+  const dataPerPage = 10;
+  const totalPages = Math.ceil(tasks.length / dataPerPage);
+  const startIndex = (page - 1) * dataPerPage;
+  const endIndex = startIndex + dataPerPage;
+  const currentTasks = filteredTasks.slice(startIndex, endIndex);
+
+  const handlePageChange = (event, value) => {
+    setpage(value);
+  };
+
   useEffect(() => {
-    const fetchTasks = async () => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) return;
       try {
-        let q;
-
-        if (role === "admin") {
-          q = collection(db, "tasks");
-        } else {
-          q = query(
-            collection(db, "tasks"),
-            where("assignedToUid", "==", user.uid)
-          );
+        const token = await user.getIdToken();
+        const res = await fetch("http://localhost:3000/api/tasks", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error);
         }
-
-        const snapshot = await getDocs(q);
-        const taskData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-
-        dispatch(setTasks(taskData));
+        dispatch(setTasks(data.tasks));
       } catch (error) {
-        console.log("Error fetching tasks:", error);
+        console.log("Error fetching tasks:", error.message);
       }
-    };
-
-    if (user?.uid) {
-      fetchTasks();
-    }
-  }, [dispatch, user, role]);
+    });
+    return () => unsubscribe();
+  }, [dispatch]);
 
   //delete task
   const handleDelete = async (id) => {
     try {
-      await deleteDoc(doc(db, "tasks", id));
+      const token = await getAuth().currentUser.getIdToken();
+
+      const res = await fetch(`http://localhost:3000/api/tasks/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error);
+      }
+
       dispatch(deleteTaskRedux(id));
     } catch (error) {
-      console.log("Error deleting task:", error);
+      console.log("Error deleting task:", error.message);
     }
   };
 
@@ -75,20 +94,10 @@ const Dashboard = () => {
   return (
     <div>
       <nav className="bg-gray-400 flex justify-between items-center px-5 py-3">
-        <h1 className="text-white text-2xl font-bold">
-          Task Manager
-        </h1>
+        <h1 className="text-white text-2xl font-bold">Task Manager</h1>
 
         <div className="flex gap-3 items-center">
-          <h1 className="text-white text-xl">
-            Welcome, {user?.name}
-          </h1>
-
-          <Button
-            variant="contained"
-            color="error"
-            onClick={handleLogout}
-          >
+          <Button variant="contained" color="error" onClick={handleLogout}>
             Log Out
           </Button>
         </div>
@@ -96,9 +105,12 @@ const Dashboard = () => {
 
       <main className="max-w-4xl mx-auto px-4">
         <div className="flex justify-between items-center mt-6">
-          <h2 className="text-3xl font-bold">
-            Your Tasks
-          </h2>
+          <div>
+            <h1 className="text-xl">
+              Welcome, {user?.user?.name || user?.name}
+            </h1>
+            <h1 className="text-3xl font-bold">Your Tasks</h1>
+          </div>
 
           <Button variant="contained" color="secondary">
             <Link
@@ -110,11 +122,28 @@ const Dashboard = () => {
           </Button>
         </div>
 
+        <SearchFilter
+          search={search}
+          status={status}
+          dueDate={dueDate}
+          onSearchChange={setSearch}
+          onStatusChange={setStatus}
+          onDateChange={setDueDate}
+        />
+
         <TaskList
-          tasks={tasks}
+          tasks={filteredTasks}
           onDelete={handleDelete}
           onEdit={(task) => navigate(`/editTask/${task.id}`)}
         />
+
+        <Stack spacing={2} alignItems="center" mt={3}>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={handlePageChange}
+          />
+        </Stack>
       </main>
     </div>
   );

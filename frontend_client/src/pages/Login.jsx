@@ -48,7 +48,7 @@ const Login = () => {
 
     dispatch(setUser(userData));
 
-    navigate(role === "admin" ? "/admin" : "/dashboard", {
+    navigate(userData.role === "admin" ? "/admin" : "/dashboard", {
       replace: true,
     });
 

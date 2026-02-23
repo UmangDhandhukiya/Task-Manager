@@ -1,30 +1,46 @@
 import React, { useEffect, useState } from "react";
-import { TextField, Button, Box, Typography, MenuItem } from "@mui/material";
+import {
+  TextField,
+  Button,
+  Box,
+  Typography,
+  MenuItem,
+  CircularProgress,
+} from "@mui/material";
 import { useForm, Controller } from "react-hook-form";
 import { useSelector } from "react-redux";
 import { getAuth } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 
 const AddTask = () => {
   const { user } = useSelector((state) => state.auth);
   const [usersList, setUsersList] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const navigate = useNavigate();
 
   const {
     control,
     handleSubmit,
     reset,
-    formState: { errors },
-  } = useForm();
+    formState: { errors, isSubmitting },
+  } = useForm({
+    defaultValues: {
+      title: "",
+      description: "",
+      dueDate: "",
+      assignedTo: "",
+    },
+  });
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
+        setLoadingUsers(true);
+
         const auth = getAuth();
         const firebaseUser = auth.currentUser;
 
-        if (!firebaseUser) {
-          console.log("No authenticated user");
-          return;
-        }
+        if (!firebaseUser) return;
 
         const token = await firebaseUser.getIdToken();
 
@@ -34,14 +50,14 @@ const AddTask = () => {
           },
         });
 
-        if (!res.ok) {
-          throw new Error("Unauthorized");
-        }
+        if (!res.ok) throw new Error("Failed to fetch users");
 
         const data = await res.json();
         setUsersList(data);
       } catch (error) {
-        console.log("Error fetching users:", error);
+        console.log("Error fetching users:", error.message);
+      } finally {
+        setLoadingUsers(false);
       }
     };
 
@@ -49,10 +65,11 @@ const AddTask = () => {
   }, []);
 
   const onSubmit = async (data) => {
+    console.log(data);
     try {
       const auth = getAuth();
       const firebaseUser = auth.currentUser;
-
+      console.log(firebaseUser);
       if (!firebaseUser) {
         alert("User not authenticated");
         return;
@@ -61,11 +78,10 @@ const AddTask = () => {
       const token = await firebaseUser.getIdToken();
 
       const payload = {
-        title: data.title,
-        description: data.description,
-        status: data.status,
+        title: data.title.trim(),
+        description: data.description.trim(),
         dueDate: data.dueDate,
-        ownerId: firebaseUser.uid, 
+        ownerId: firebaseUser.uid,
         assignedToUid: data.assignedTo || null,
         createdAt: new Date().toISOString(),
       };
@@ -86,7 +102,7 @@ const AddTask = () => {
       }
 
       reset();
-      alert("Task Created Successfully");
+      user.role === "admin" ? navigate("/admin") : navigate("/dashboard");
     } catch (error) {
       console.log("Create Task Error:", error.message);
       alert(error.message);
@@ -106,12 +122,10 @@ const AddTask = () => {
         Add Task
       </Typography>
 
-      <form onSubmit={handleSubmit(onSubmit)}>
-        {/* Title */}
+      <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <Controller
           name="title"
           control={control}
-          defaultValue=""
           rules={{
             required: "Title is required",
             minLength: {
@@ -131,11 +145,9 @@ const AddTask = () => {
           )}
         />
 
-        {/* Description */}
         <Controller
           name="description"
           control={control}
-          defaultValue=""
           rules={{ required: "Description is required" }}
           render={({ field }) => (
             <TextField
@@ -151,35 +163,18 @@ const AddTask = () => {
           )}
         />
 
-        {/* Status */}
-        <Controller
-          name="status"
-          control={control}
-          defaultValue="todo"
-          render={({ field }) => (
-            <TextField
-              {...field}
-              select
-              label="Status"
-              fullWidth
-              margin="normal"
-            >
-              <MenuItem value="todo">Todo</MenuItem>
-              <MenuItem value="in-progress">In Progress</MenuItem>
-              <MenuItem value="done">Done</MenuItem>
-            </TextField>
-          )}
-        />
-
-        {/* Due Date */}
         <Controller
           name="dueDate"
           control={control}
-          defaultValue=""
           rules={{
             required: "Due date is required",
-            validate: (value) =>
-              new Date(value) > new Date() || "Due date must be future date",
+            validate: (value) => {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              return (
+                new Date(value) > today || "Due date must be a future date"
+              );
+            },
           }}
           render={({ field }) => (
             <TextField
@@ -194,10 +189,9 @@ const AddTask = () => {
           )}
         />
 
-        {/* Assign To */}        <Controller
+        <Controller
           name="assignedTo"
           control={control}
-          defaultValue=""
           render={({ field }) => (
             <TextField
               {...field}
@@ -207,11 +201,18 @@ const AddTask = () => {
               margin="normal"
             >
               <MenuItem value="">None</MenuItem>
-              {usersList.map((u) => (
-                <MenuItem key={u.uid} value={u.uid}>
-                  {u.email}
+              {loadingUsers ? (
+                <MenuItem disabled>
+                  <CircularProgress size={20} />
                 </MenuItem>
-              ))}
+              ) : (
+                usersList.map((u) => (
+                 
+                  <MenuItem key={u.uid} value={u.uid}>
+                    {u.email}
+                  </MenuItem>
+                ))
+              )}
             </TextField>
           )}
         />
@@ -222,8 +223,9 @@ const AddTask = () => {
           color="secondary"
           fullWidth
           sx={{ mt: 2 }}
+          disabled={isSubmitting}
         >
-          Create Task
+          Add Task
         </Button>
       </form>
     </Box>
