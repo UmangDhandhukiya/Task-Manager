@@ -1,13 +1,8 @@
 import React, { useEffect, useState } from "react";
-import {
-  TextField,
-  Button,
-  Box,
-  Typography,
-  MenuItem,
-} from "@mui/material";
+import { TextField, Button, Box, Typography, MenuItem } from "@mui/material";
 import { useForm, Controller } from "react-hook-form";
 import { useSelector } from "react-redux";
+import { getAuth } from "firebase/auth";
 
 const AddTask = () => {
   const { user } = useSelector((state) => state.auth);
@@ -20,46 +15,98 @@ const AddTask = () => {
     formState: { errors },
   } = useForm();
 
-  // 🔹 Fetch users for assignment dropdown
   useEffect(() => {
     const fetchUsers = async () => {
-      const res = await fetch("http://localhost:3000/api/users");
-      const data = await res.json();
-      setUsersList(data.users || []);
+      try {
+        const auth = getAuth();
+        const firebaseUser = auth.currentUser;
+
+        if (!firebaseUser) {
+          console.log("No authenticated user");
+          return;
+        }
+
+        const token = await firebaseUser.getIdToken();
+
+        const res = await fetch("http://localhost:3000/api/user", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) {
+          throw new Error("Unauthorized");
+        }
+
+        const data = await res.json();
+        setUsersList(data);
+      } catch (error) {
+        console.log("Error fetching users:", error);
+      }
     };
+
     fetchUsers();
   }, []);
 
   const onSubmit = async (data) => {
-    const payload = {
-      title: data.title,
-      description: data.description,
-      status: data.status,
-      dueDate: data.dueDate,
-      ownerId: user.uid,
-      assignedTo: data.assignedTo || null,
-    };
+    try {
+      const auth = getAuth();
+      const firebaseUser = auth.currentUser;
 
-    await fetch("http://localhost:3000/api/tasks", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+      if (!firebaseUser) {
+        alert("User not authenticated");
+        return;
+      }
 
-    reset();
-    alert("Task Created Successfully");
+      const token = await firebaseUser.getIdToken();
+
+      const payload = {
+        title: data.title,
+        description: data.description,
+        status: data.status,
+        dueDate: data.dueDate,
+        ownerId: firebaseUser.uid, 
+        assignedToUid: data.assignedTo || null,
+        createdAt: new Date().toISOString(),
+      };
+
+      const res = await fetch("http://localhost:3000/api/tasks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || "Failed to create task");
+      }
+
+      reset();
+      alert("Task Created Successfully");
+    } catch (error) {
+      console.log("Create Task Error:", error.message);
+      alert(error.message);
+    }
   };
 
   return (
-    <Box maxWidth="500px" mx="auto" mt={5} p={3} border="1px solid #ccc" borderRadius={2}>
+    <Box
+      maxWidth="500px"
+      mx="auto"
+      mt={5}
+      p={3}
+      border="1px solid #ccc"
+      borderRadius={2}
+    >
       <Typography variant="h5" mb={2}>
         Add Task
       </Typography>
 
       <form onSubmit={handleSubmit(onSubmit)}>
-
         {/* Title */}
         <Controller
           name="title"
@@ -147,8 +194,7 @@ const AddTask = () => {
           )}
         />
 
-        {/* Assign To */}
-        <Controller
+        {/* Assign To */}        <Controller
           name="assignedTo"
           control={control}
           defaultValue=""

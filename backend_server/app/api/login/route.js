@@ -23,6 +23,7 @@ export async function POST(req) {
     const Data = userDoc.data();
 
     const userData = {
+      uid: decoded.uid,
       name: Data.name,
       email: Data.email,
       role: Data.role,
