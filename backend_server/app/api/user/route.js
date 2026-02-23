@@ -1,35 +1,81 @@
-import db from "@/app/lib/firebase"
-import { NextResponse } from "next/server"
+import admin from "../../lib/firebase";
+import { NextResponse } from "next/server";
 
-//add user like controller
-export async function POST(req){
-    try{
-        const body = await req.json()
-        const userData = await db.collection("users").add({
-            email: body.email,
-            password: body.password,
-            role: "user",
-        })
+const db = admin.firestore();
 
-        return NextResponse.json({
-            success:true,
-            id:userData.id
-        })
-    }catch(error){
-        return NextResponse.json({
-            success:false,
-            error: error.message
-        })
+export async function POST(req) {
+  try {
+    const authHeader = req.headers.get("authorization");
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
     }
+
+    const token = authHeader.split("Bearer ")[1];
+
+    const decoded = await admin.auth().verifyIdToken(token);
+
+    const body = await req.json();
+
+    await db.collection("users").doc(decoded.uid).set({
+      uid: decoded.uid,
+
+      email: decoded.email,
+
+      name: body.name,
+
+      role: "user",
+
+      createdAt: new Date(),
+    });
+
+    return NextResponse.json({
+      success: true,
+
+      uid: decoded.uid,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+
+        error: error.message,
+      },
+
+      { status: 500 },
+    );
+  }
 }
 
-//get user
-export async function GET(){
-    const allUser = await db.collection("users").get()
-    const users = allUser.docs.map(user => ({
-        id:user.id,
-        ...user.data()
-    })) 
+export async function GET(req) {
+  try {
+    const authHeader = req.headers.get("authorization");
 
-    return NextResponse.json(users)
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const token = authHeader.split("Bearer ")[1];
+
+    await admin.auth().verifyIdToken(token);
+
+    const snapshot = await db.collection("users").get();
+
+    const users = snapshot.docs.map((doc) => ({
+      id: doc.id,
+
+      ...doc.data(),
+    }));
+
+    return NextResponse.json(users);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error.message },
+
+      { status: 500 },
+    );
+  }
 }

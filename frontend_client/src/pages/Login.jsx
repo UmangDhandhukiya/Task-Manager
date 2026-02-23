@@ -1,21 +1,125 @@
-import React from 'react'
+import React from "react";
+import { TextField, Button, Box, Typography } from "@mui/material";
+import { useForm } from "react-hook-form";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../firebase";
+import { useNavigate, Link } from "react-router-dom";
+import { useDispatch } from "react-redux";
+import { setUser, setLoading } from "../appStore/authSlice";
 
 const Login = () => {
-  return (
-    <div className='flex justify-center items-center min-h-screen'>
-     <form action="" method='POST' className='w-72 lg:w-2xl border border-black rounded-2xl p-4  mx-auto my-0'>
-        <div>
-          <label htmlFor="email" className='pb-1'>Email</label><br/>
-          <input type="email" name="email" id="email" className='border border-black rounded-sm px-4 py-1 w-full'/> 
-        </div> 
-        <div>
-          <label htmlFor="password" className='pb-1'>Password</label><br/>  
-          <input type="password" name="password" id="password" className='border border-black rounded-sm px-4 py-1 w-full'/> 
-        </div> 
-        <button type='submit' className='w-1/2 bg-gray-700 text-gray-200 rounded-md'>Login</button>
-     </form>
-    </div>
-  )
-}
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
 
-export default Login
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm();
+
+  const onSubmit = async (data) => {
+  try {
+    dispatch(setLoading(true));
+
+    await signInWithEmailAndPassword(auth, data.email, data.password);
+
+    const token = await auth.currentUser.getIdToken();
+
+    const response = await fetch("http://localhost:3000/api/login", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    let role = "user";
+    let name = "";
+
+    if (response.ok) {
+      const json = await response.json();
+      role = json?.user?.role || "user";
+      name = json?.user?.name || "";
+    }
+
+    const userData = {
+      uid: auth.currentUser.uid,
+      email: auth.currentUser.email,
+      role,
+      name,
+    };
+
+    dispatch(setUser(userData));
+
+    navigate(role === "admin" ? "/admin" : "/dashboard", {
+      replace: true,
+    });
+
+  } catch (error) {
+    dispatch(setLoading(false));
+    alert(error.message);
+  }
+};
+
+  return (
+    <Box
+      display="flex"
+      justifyContent="center"
+      alignItems="center"
+      height="100vh"
+    >
+      <Box
+        sx={{
+          width: "90%",
+          maxWidth: "500px",
+          p: 4,
+          border: "1px solid purple",
+          borderRadius: 2,
+        }}
+      >
+        <Typography variant="h5" mb={2}>
+          Login
+        </Typography>
+
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <TextField
+            label="Email"
+            fullWidth
+            margin="normal"
+            {...register("email", {
+              required: "Email required",
+            })}
+            error={!!errors.email}
+            helperText={errors.email?.message}
+          />
+
+          <TextField
+            label="Password"
+            type="password"
+            fullWidth
+            margin="normal"
+            {...register("password", {
+              required: "Password required",
+            })}
+            error={!!errors.password}
+            helperText={errors.password?.message}
+          />
+
+          <Button
+            type="submit"
+            variant="contained"
+            color="secondary"
+            fullWidth
+            sx={{ mt: 2 }}
+            disabled={isSubmitting}
+          >
+            Login
+          </Button>
+        </form>
+
+        <Typography textAlign="center" mt={2}>
+          Don't have account? <Link to="/register">Register</Link>
+        </Typography>
+      </Box>
+    </Box>
+  );
+};
+
+export default Login;
