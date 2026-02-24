@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 const db = admin.firestore();
 
+//register user
 export async function POST(req) {
   try {
     const authHeader = req.headers.get("authorization");
@@ -50,6 +51,7 @@ export async function POST(req) {
   }
 }
 
+// get user
 export async function GET(req) {
   try {
     const authHeader = req.headers.get("authorization");
